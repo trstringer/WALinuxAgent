@@ -300,10 +300,20 @@ class ResourceDiskHandler(object):
             self.mkfile(swapfile, size_kb * 1024)
             shellutil.run("mkswap {0}".format(swapfile))
         if shellutil.run("swapon {0}".format(swapfile)):
-            raise ResourceDiskError("{0}".format(swapfile))
+            # If swapon failed, it could be because there are holes
+            # in the swap file. This can happen with fallocate in
+            # certain kernel versions. In the event that we fail on
+            # swapon, we should try with dd before failing entirely.
+            self.mkfile(
+                filename=swapfile,
+                nbytes=size_kb * 1024,
+                force_dd=True
+            )
+            if shellutil.run("swapon {0}".format(swapfile)):
+                raise ResourceDiskError("{0}".format(swapfile))
         logger.info("Enabled {0}KB of swap at {1}".format(size_kb, swapfile))
 
-    def mkfile(self, filename, nbytes): # pylint: disable=R0912
+    def mkfile(self, filename, nbytes, force_dd=False): # pylint: disable=R0912
         """
         Create a non-sparse file of that size. Deletes and replaces existing
         file.
@@ -333,7 +343,7 @@ class ResourceDiskHandler(object):
         # fallocate
         ret = 0
         fn_sh = shellutil.quote((filename,))
-        if self.fs != 'xfs':
+        if self.fs != 'xfs' and not force_dd:
             # os.posix_fallocate
             if sys.version_info >= (3, 3):
                 # Probable errors:
