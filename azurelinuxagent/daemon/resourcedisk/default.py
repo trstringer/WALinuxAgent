@@ -304,11 +304,13 @@ class ResourceDiskHandler(object):
             # in the swap file. This can happen with fallocate in
             # certain kernel versions. In the event that we fail on
             # swapon, we should try with dd before failing entirely.
+            logger.warn("Failed swapon, using dd instead of fallocate")
             self.mkfile(
                 filename=swapfile,
                 nbytes=size_kb * 1024,
                 force_dd=True
             )
+            shellutil.run("mkswap {0}".format(swapfile))
             if shellutil.run("swapon {0}".format(swapfile)):
                 raise ResourceDiskError("{0}".format(swapfile))
         logger.info("Enabled {0}KB of swap at {1}".format(size_kb, swapfile))
